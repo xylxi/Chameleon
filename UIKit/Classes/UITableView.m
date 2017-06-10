@@ -87,8 +87,11 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
 {
     if ((self=[super initWithFrame:frame])) {
         _style = theStyle;
+        // cell缓存字典
         _cachedCells = [[NSMutableDictionary alloc] init];
+        // Section 缓存数组
         _sections = [[NSMutableArray alloc] init];
+        // 复用的cell 集合
         _reusableCells = [[NSMutableSet alloc] init];
 
         self.separatorColor = [UIColor colorWithRed:.88f green:.88f blue:.88f alpha:1];
@@ -98,11 +101,12 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
         self.allowsSelectionDuringEditing = NO;
         self.sectionHeaderHeight = self.sectionFooterHeight = 22;
         self.alwaysBounceVertical = YES;
-
+        
         if (_style == UITableViewStylePlain) {
             self.backgroundColor = [UIColor whiteColor];
         }
         
+        // 加入 layout 标记，进行手动触发布局设置
         [self _setNeedsReload];
     }
     return self;
@@ -149,7 +153,9 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
 - (void)_updateSectionsCache
 {
     // uses the dataSource to rebuild the cache.
+    // 使用 dataSource 来创建缓存容器
     // if there's no dataSource, this can't do anything else.
+    // 如果没有 dataSource 则放弃重用操作
     // note that I'm presently caching and hanging on to views and titles for section headers which is something
     // the real UIKit appears to fetch more on-demand than this. so far this has not been a problem.
 
@@ -164,11 +170,14 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
     
     if (_dataSource) {
         // compute the heights/offsets of everything
+        // 根据 dataSource 计算高度和偏移量
         const CGFloat defaultRowHeight = _rowHeight ?: _UITableViewDefaultRowHeight;
+        // 获取 Section 的数目
         const NSInteger numberOfSections = [self numberOfSections];
         for (NSInteger section=0; section<numberOfSections; section++) {
+            // 获取当前 section 的 cell 个数
             const NSInteger numberOfRowsInSection = [self numberOfRowsInSection:section];
-            
+            // 当前 section 的记录
             UITableViewSection *sectionRecord = [[UITableViewSection alloc] init];
             sectionRecord.headerTitle = _dataSourceHas.titleForHeaderInSection? [self.dataSource tableView:self titleForHeaderInSection:section] : nil;
             sectionRecord.footerTitle = _dataSourceHas.titleForFooterInSection? [self.dataSource tableView:self titleForFooterInSection:section] : nil;
@@ -201,7 +210,9 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
                 sectionRecord.footerHeight = 0;
             }
 
+            // 存储 cell 的高度数组
             CGFloat *rowHeights = malloc(numberOfRowsInSection * sizeof(CGFloat));
+            // 当前 section 的总高度
             CGFloat totalRowsHeight = 0;
             
             for (NSInteger row=0; row<numberOfRowsInSection; row++) {
@@ -258,12 +269,19 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
     // dequeuing and keep a list of all existing cells that are visible and those
     // that exist but are not visible and are reusable
     // if there's no section cache, no rows will be laid out but the header/footer will (if any).
+    // 在需要渲染时放置需要的 Header 和 Cell
+    // 缓存所有出现的单元格， 并添加至复用容器
+    // 之后那些不在显示但是已经出现的 Cell 将会被复用
     
+    // 获取容器视图相对父类视图的尺寸及坐标
     const CGSize boundsSize = self.bounds.size;
+    // 获取向下滑动偏移量
     const CGFloat contentOffset = self.contentOffset.y;
+    // 获取可视矩形框的尺寸
     const CGRect visibleBounds = CGRectMake(0,contentOffset,boundsSize.width,boundsSize.height);
+    // 表高纪录值
     CGFloat tableHeight = 0;
-    
+    // 如果有 header 则需要额外计算
     if (_tableHeaderView) {
         CGRect tableHeaderFrame = _tableHeaderView.frame;
         tableHeaderFrame.origin = CGPointZero;
@@ -273,37 +291,55 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
     }
     
     // layout sections and rows
+    // availableCell 记录当前正在显示的 Cell
     NSMutableDictionary *availableCells = [_cachedCells mutableCopy];
     const NSInteger numberOfSections = [_sections count];
     [_cachedCells removeAllObjects];
     
+    // 滑动列表，更新当前显示容器
     for (NSInteger section=0; section<numberOfSections; section++) {
+        // 当前 section 的可视区域
         CGRect sectionRect = [self rectForSection:section];
+        
         tableHeight += sectionRect.size.height;
+        
+        // 如果当前 section 和 可视区域有重叠
         if (CGRectIntersectsRect(sectionRect, visibleBounds)) {
             const CGRect headerRect = [self rectForHeaderInSection:section];
             const CGRect footerRect = [self rectForFooterInSection:section];
+            // 获取 section 数据
             UITableViewSection *sectionRecord = [_sections objectAtIndex:section];
+            // cell 的个数
             const NSInteger numberOfRows = sectionRecord.numberOfRows;
-            
+
             if (sectionRecord.headerView) {
+                // section 的 headerView 的 frame
                 sectionRecord.headerView.frame = headerRect;
             }
             
             if (sectionRecord.footerView) {
+                // section 的 footerView 的 frame
                 sectionRecord.footerView.frame = footerRect;
             }
             
             for (NSInteger row=0; row<numberOfRows; row++) {
+                // 获取 indexPath
                 NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                // 拿到 indexPath 的 rect
                 CGRect rowRect = [self rectForRowAtIndexPath:indexPath];
                 if (CGRectIntersectsRect(rowRect,visibleBounds) && rowRect.size.height > 0) {
+                    // 如果 indexPath 和 visibleBounds 有交际，并且 height > 0
+                    // 说明要显示该 indexPath 位置的 cell
+                    // 获取 cell
                     UITableViewCell *cell = [availableCells objectForKey:indexPath] ?: [self.dataSource tableView:self cellForRowAtIndexPath:indexPath];
                     if (cell) {
+                        // 将 cell 加入到缓存中
                         [_cachedCells setObject:cell forKey:indexPath];
+                        // 将 cell 从 availableCells 中删除
                         [availableCells removeObjectForKey:indexPath];
                         cell.highlighted = [_highlightedRow isEqual:indexPath];
                         cell.selected = [_selectedRow isEqual:indexPath];
+                        // 修改 cell 的 frame
                         cell.frame = rowRect;
                         cell.backgroundColor = self.backgroundColor;
                         [cell _setSeparatorStyle:_separatorStyle color:_separatorColor];
@@ -317,8 +353,10 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
     // remove old cells, but save off any that might be reusable
     for (UITableViewCell *cell in [availableCells allValues]) {
         if (cell.reuseIdentifier) {
+            // 将剩余的可复用的 cell 加入到 _reusableCells 数组中
             [_reusableCells addObject:cell];
         } else {
+            // 不可复用的销毁
             [cell removeFromSuperview];
         }
     }
@@ -332,6 +370,8 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
     // the frame of the table view has actually animated down to the new, shorter size. So the animation is jumpy/ugly because
     // the cells suddenly disappear instead of seemingly animating down and out of view like they should. This tries to leave them
     // on screen as long as possible, but only if they don't get in the way.
+    
+    // 确保所有的可用 (未出现在屏幕上) 的复用 cell 在 availableCells 中
     NSArray* allCachedCells = [_cachedCells allValues];
     for (UITableViewCell *cell in _reusableCells) {
         if (CGRectIntersectsRect(cell.frame,visibleBounds) && ![allCachedCells containsObject: cell]) {
@@ -394,15 +434,18 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
         const NSUInteger row = indexPath.row;
         
         if (row < sectionRecord.numberOfRows) {
+            // 拿到该 section 中所有的 cell 的高度数组
             CGFloat *rowHeights = sectionRecord.rowHeights;
+            // 获取到该 section 的偏移量
             CGFloat offset = [self _offsetForSection:indexPath.section];
-
+            
             offset += sectionRecord.headerHeight;
             
             for (NSInteger currentRow=0; currentRow<row; currentRow++) {
+                // 计算 indexPath 在 tableView 上的便宜量
                 offset += rowHeights[currentRow];
             }
-            
+            // 获取 indexPath 的 rect
             return [self _CGRectFromVerticalOffset:offset height:rowHeights[row]];
         }
     }
@@ -551,17 +594,23 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
 - (void)reloadData
 {
     // clear the caches and remove the cells since everything is going to change
+    // 清楚之前的缓存并删除 Cell
     [[_cachedCells allValues] makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    // 复用 Cell 也进行删除
     [_reusableCells makeObjectsPerformSelector:@selector(removeFromSuperview)];
     [_reusableCells removeAllObjects];
     [_cachedCells removeAllObjects];
 
     // clear prior selection
+    // 清楚选择的 cell
     _selectedRow = nil;
+    // 删除高亮的 cell
     _highlightedRow = nil;
     
     // trigger the section cache to be repopulated
+    // 更新所有 sections 的状态
     [self _updateSectionsCache];
+    // 设置 size
     [self _setContentSize];
     
     _needsReload = NO;
@@ -588,7 +637,9 @@ const CGFloat _UITableViewDefaultRowHeight = 43;
 - (void)layoutSubviews
 {
     _backgroundView.frame = self.bounds;
+    // 根据标记确定是否执行数据更新
     [self _reloadDataIfNeeded];
+    // 布局入口
     [self _layoutTableView];
     [super layoutSubviews];
 }

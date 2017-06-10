@@ -41,6 +41,7 @@
 @property (nonatomic, assign) CGFloat headerHeight;
 @property (nonatomic, assign) CGFloat footerHeight;
 @property (nonatomic, readonly) NSInteger numberOfRows;
+// 缓存 section 中各个 cell 的高度
 @property (nonatomic, readonly) CGFloat *rowHeights;
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UIView *footerView;
